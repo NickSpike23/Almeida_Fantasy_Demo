@@ -33,7 +33,7 @@ class GameState:
         self._max_bmap_defeated = False
         self._zuazo_first_done = False
         self._zuazo_combat_done = False
-        self._door_d_visited = False
+        self._door_d_visited = True
         self._door_d_visited2nd = False
 
     @property
