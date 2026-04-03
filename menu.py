@@ -65,6 +65,7 @@ CHARACTERS = [
     {"name": "Rafa",    "img": "Rafa.jpg"},
 ]
 
+
 # Estados del juego
 STATE_MENU   = "menu"
 STATE_SELECT = "select"
@@ -74,32 +75,32 @@ STATE_GAME   = "game"
 # ─────────────────────────────────────────────────────────────────────────────
 class Button:
     def __init__(self, x, y, w, h, text, font, enabled=True):
-        self.rect    = pygame.Rect(x, y, w, h)
-        self.text    = text
-        self.font    = font
-        self.hovered = False
+        self.rect    = pygame.Rect(x, y, w, h) # Rectángulo del botón
+        self.text    = text # Texto a mostrar
+        self.font    = font # Fuente para renderizar el texto
+        self.hovered = False # el mouse está sobre el botón
         self.focused = False   # foco por teclado
-        self.enabled = enabled
+        self.enabled = enabled # el botón está activo (clickeable) o no
 
-    def draw(self, surface):
-        active = self.hovered or self.focused
-        if not self.enabled:
-            color_bg  = COLOR_BTN_DISABLED
-            color_txt = COLOR_TEXT_DISABLED
-            border_c  = (80, 60, 120)
-        elif active:
-            color_bg  = COLOR_BTN_HOVER
-            color_txt = COLOR_TEXT_HOVER
-            border_c  = COLOR_BTN_BORDER
-        else:
-            color_bg  = COLOR_BTN_NORMAL
-            color_txt = COLOR_TEXT
-            border_c  = COLOR_BTN_BORDER
+    def draw(self, surface): # Dibuja el botón con estilos según su estado
+        active = self.hovered or self.focused # el botón está activo por hover o foco de teclado
+        if not self.enabled: # el botón está deshabilitado
+            color_bg  = COLOR_BTN_DISABLED # fondo más oscuro
+            color_txt = COLOR_TEXT_DISABLED # texto más apagado
+            border_c  = (80, 60, 120) # borde más oscuro
+        elif active: # el botón está activo por hover o foco de teclado
+            color_bg  = COLOR_BTN_HOVER # fondo más claro
+            color_txt = COLOR_TEXT_HOVER # texto más brillante
+            border_c  = COLOR_BTN_BORDER # borde normal
+        else: # estado normal
+            color_bg  = COLOR_BTN_NORMAL # fondo normal
+            color_txt = COLOR_TEXT # texto normal
+            border_c  = COLOR_BTN_BORDER # borde normal
 
-        shadow_rect = self.rect.move(4, 4)
-        pygame.draw.rect(surface, (0, 0, 0), shadow_rect, border_radius=BORDER_RADIUS)
-        pygame.draw.rect(surface, color_bg,  self.rect,   border_radius=BORDER_RADIUS)
-        pygame.draw.rect(surface, border_c,  self.rect,   width=2, border_radius=BORDER_RADIUS)
+        shadow_rect = self.rect.move(4, 4) # sombra desplazada hacia abajo y derecha
+        pygame.draw.rect(surface, (0, 0, 0), shadow_rect, border_radius=BORDER_RADIUS) # sombra negra
+        pygame.draw.rect(surface, color_bg,  self.rect,   border_radius=BORDER_RADIUS) # fondo del botón
+        pygame.draw.rect(surface, border_c,  self.rect,   width=2, border_radius=BORDER_RADIUS) # borde del botón
 
         # Anillo blanco extra cuando el foco viene del teclado
         if self.focused and self.enabled:

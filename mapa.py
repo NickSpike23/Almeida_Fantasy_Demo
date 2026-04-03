@@ -11,6 +11,7 @@ Controles: WASD / flechas para mover al jugador.
 import pygame
 import sys
 import os
+from game_state import get_game_state
 
 # ── Rutas ─────────────────────────────────────────────────────────────────────
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +24,7 @@ SCREEN_W, SCREEN_H = 1280, 720
 FPS          = 60
 PLAYER_SPEED = 6
 SPRITE_W     = 32
-SPRITE_H     = 32   # más alto que ancho para simular personaje de pie
+SPRITE_H     = 32   
 
 # Nombre de imagen por personaje (clave en minúsculas)
 _CHAR_IMAGE: dict[str, str] = {
@@ -47,6 +48,7 @@ _max_bmap_defeated: bool = False
 _zuazo_first_done:  bool = False   # primer diálogo con Zuazo completado
 _door_d_visited:    bool = True   # jugador vio la puerta D cerrada (post 1er diálogo)
 _zuazo_combat_done: bool = False   # combate con Zuazo completado
+_door_d_visited2nd: bool = False   # jugador vio la puerta D cerrada por segunda vez
 
 # ── Sonido de tipeo (beep 8-bit generado proceduralmente) ─────────────────────
 _type_sound_cache: "pygame.mixer.Sound | None" = None
@@ -81,6 +83,53 @@ def _get_type_sound() -> "pygame.mixer.Sound | None":
     except Exception:
         _type_sound_cache = None
     return _type_sound_cache
+
+
+def _sync_legacy_state_cache(state) -> None:
+    global _max_bmap_defeated, _zuazo_first_done, _door_d_visited
+    global _zuazo_combat_done, _door_d_visited2nd
+
+    _max_bmap_defeated = state.max_bmap_defeated
+    _zuazo_first_done = state.zuazo_first_done
+    _door_d_visited = state.door_d_visited
+    _zuazo_combat_done = state.zuazo_combat_done
+    _door_d_visited2nd = state.door_d_visited2nd
+
+
+def _is_walkable_point(rx: int, ry: int, walkable_rects: list[pygame.Rect]) -> bool:
+    cx = int(rx) + SPRITE_W // 2
+    cy = int(ry) + SPRITE_H // 2
+    return any(w.collidepoint(cx, cy) for w in walkable_rects)
+
+
+def _find_nearest_walkable_position(seed_x: float, seed_y: float,
+                                    walkable_rects: list[pygame.Rect],
+                                    max_x: int, max_y: int,
+                                    radius: int = 0,
+                                    max_radius: int = 240) -> tuple[int, int]:
+    candidate_x = max(0, min(max_x, int(seed_x)))
+    candidate_y = max(0, min(max_y, int(seed_y)))
+
+    if _is_walkable_point(candidate_x, candidate_y, walkable_rects):
+        return candidate_x, candidate_y
+
+    if radius >= max_radius:
+        return candidate_x, candidate_y
+
+    step = max(1, radius + 1)
+    offsets = [
+        (step, 0), (-step, 0), (0, step), (0, -step),
+        (step, step), (-step, step), (step, -step), (-step, -step),
+    ]
+    for off_x, off_y in offsets:
+        nx = max(0, min(max_x, candidate_x + off_x))
+        ny = max(0, min(max_y, candidate_y + off_y))
+        if _is_walkable_point(nx, ny, walkable_rects):
+            return nx, ny
+
+    return _find_nearest_walkable_position(
+        candidate_x, candidate_y, walkable_rects, max_x, max_y, radius + step, max_radius
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -130,6 +179,7 @@ def run_bmap(screen: pygame.Surface,
         return   # si el archivo aún no existe, volver sin crashear
     bmap_surf = pygame.image.load(bmap_path).convert()
     bmap_w, bmap_h = bmap_surf.get_size()
+    state = get_game_state()
 
     # ── Música del Bmap ───────────────────────────────────────────────────────
     pygame.mixer.music.stop()
@@ -162,10 +212,9 @@ def run_bmap(screen: pygame.Surface,
         max_sprite = pygame.Surface((32, 32), pygame.SRCALPHA)
         max_sprite.fill((220, 50, 50, 200))
     max_rect = pygame.Rect(MAX_MAP_X, MAX_MAP_Y, 32, 32)
-    global _max_bmap_defeated, _zuazo_first_done, _door_d_visited, _zuazo_combat_done
-    max_defeated      = _max_bmap_defeated
-    zuazo_first_done  = _zuazo_first_done
-    zuazo_combat_done = _zuazo_combat_done
+    max_defeated      = state.max_bmap_defeated
+    zuazo_first_done  = state.zuazo_first_done
+    zuazo_combat_done = state.zuazo_combat_done
 
     # ── Sprite de Zuazo en Bmap (aparece tras derrotar a Max) ─────────────────
     ZUAZO_MAP_X, ZUAZO_MAP_Y = 517, 145
@@ -191,6 +240,10 @@ def run_bmap(screen: pygame.Surface,
     else:
         px = float(bmap_w // 2 - SPRITE_W // 2)
         py = float(bmap_h // 2 - SPRITE_H // 2)
+
+    px, py = _find_nearest_walkable_position(
+        px, py, BMAP_WALKABLE, bmap_w - SPRITE_W, bmap_h - SPRITE_H
+    )
 
     # ── Helper: mostrar una línea de diálogo encima de la escena ─────────────
     def show_line(speaker: str, text: str) -> None:
@@ -375,7 +428,10 @@ def run_bmap(screen: pygame.Surface,
             if player_rect_exit.colliderect(exit_rect):
                 show_unavailable_zone()
                 # Rebotar al jugador fuera del área de salida
-                px, py = float(EXIT_BOUNCE_POSITIONS[i][0]), float(EXIT_BOUNCE_POSITIONS[i][1])
+                px, py = _find_nearest_walkable_position(
+                    EXIT_BOUNCE_POSITIONS[i][0], EXIT_BOUNCE_POSITIONS[i][1],
+                    BMAP_WALKABLE, bmap_w - SPRITE_W, bmap_h - SPRITE_H
+                )
 
         # Colisión con Max → combate
         if not max_defeated:
@@ -389,7 +445,8 @@ def run_bmap(screen: pygame.Surface,
                     pygame.mixer.music.load(_map_music)
                     pygame.mixer.music.set_volume(0.7)
                     pygame.mixer.music.play(-1)
-                _max_bmap_defeated = True
+                state.mark_max_bmap_defeated()
+                _sync_legacy_state_cache(state)
                 max_defeated = True  # Actualizar variable local
                 show_line(character, "Que pedo con Max jajaja")
                 show_line(character, "Cierto, Zuazo me pidió que fuera a verlo...")
@@ -407,10 +464,11 @@ def run_bmap(screen: pygame.Surface,
                         pygame.mixer.music.load(_map_music)
                         pygame.mixer.music.set_volume(0.5)
                         pygame.mixer.music.play(-1)
-                    zuazo_first_done  = True
-                    _zuazo_first_done = True
+                    state.mark_zuazo_first_done()
+                    _sync_legacy_state_cache(state)
+                    zuazo_first_done = True
 
-                elif _door_d_visited:
+                elif state.door_d_visited:
                     from combate import run_combat_zuazo
                     run_combat_zuazo(screen, clock, character)
                     _map_music = os.path.join(MUSIC_DIR, "map.mp3")
@@ -418,8 +476,9 @@ def run_bmap(screen: pygame.Surface,
                         pygame.mixer.music.load(_map_music)
                         pygame.mixer.music.set_volume(0.5)
                         pygame.mixer.music.play(-1)
-                    zuazo_combat_done  = True
-                    _zuazo_combat_done = True
+                    state.mark_zuazo_combat_done()
+                    _sync_legacy_state_cache(state)
+                    zuazo_combat_done = True
                     show_line(character, "Andele, por andarme queriendo poner faltas")
                     show_line(character, "Aunque, ¿por qué está cerrado el D...?")
                     show_line(character, "Supongo que solo lo sabré si consigo el juego completo :P")
