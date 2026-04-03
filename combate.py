@@ -306,23 +306,33 @@ def _draw_hp_bar(surface: pygame.Surface,
                        y + (HP_BAR_H - val.get_height()) // 2))
 
 
+def _wrap_text_recursive(words: list[str], font: pygame.font.Font,
+                         max_width: int, current: str = "",
+                         lines: list[str] | None = None) -> list[str]:
+    if lines is None:
+        lines = []
+    if not words:
+        if current:
+            lines.append(current)
+        return lines
+
+    word = words[0]
+    rest = words[1:]
+    candidate = (current + " " + word).strip()
+
+    if font.size(candidate)[0] <= max_width or not current:
+        return _wrap_text_recursive(rest, font, max_width, candidate, lines)
+
+    lines.append(current)
+    return _wrap_text_recursive(rest, font, max_width, word, lines)
+
+
 def _draw_wrapped(surface: pygame.Surface, full_text: str, revealed: int,
                   font: pygame.font.Font, color: tuple,
                   rect: pygame.Rect) -> bool:
     partial = full_text[:revealed]
     words   = partial.split(" ")
-    lines: list[str] = []
-    cur = ""
-    for w in words:
-        test = (cur + " " + w).strip()
-        if font.size(test)[0] <= rect.width:
-            cur = test
-        else:
-            if cur:
-                lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
+    lines   = _wrap_text_recursive(words, font, rect.width)
     line_h = font.get_linesize()
     yp     = rect.y
     for line in lines:
